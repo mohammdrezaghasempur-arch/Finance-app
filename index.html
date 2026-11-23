@@ -1,0 +1,814 @@
+index<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مدیریت مالی هوشمند</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f172a">
+<link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ===== پیکربندی Firebase (جایگزین کنید) =====
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+window._auth = auth; window._db = db;
+
+// ===== Firebase Auth =====
+window.doRegister = async function(){
+  const em = document.getElementById('authEmail').value.trim();
+  const pw = document.getElementById('authPass').value;
+  if(!em || pw.length<6) return alert('ایمیل و رمز حداقل ۶ کاراکتر');
+  try{
+    await createUserWithEmailAndPassword(auth, em, pw);
+    alert('ثبت‌نام موفق ✅');
+  }catch(e){ alert('خطا: '+e.message); }
+};
+window.doLogin = async function(){
+  const em = document.getElementById('authEmail').value.trim();
+  const pw = document.getElementById('authPass').value;
+  try{
+    await signInWithEmailAndPassword(auth, em, pw);
+  }catch(e){ alert('خطا: '+e.message); }
+};
+window.doLogout = async function(){
+  if(confirm('خروج؟')) await signOut(auth);
+};
+
+let currentUid = null;
+let cloudSaveTimer = null;
+
+onAuthStateChanged(auth, async user=>{
+  const authBox = document.getElementById('authBox');
+  const appBox = document.getElementById('appBox');
+  if(user){
+    currentUid = user.uid;
+    authBox.classList.add('hidden');
+    appBox.classList.remove('hidden');
+    document.getElementById('userEmail').textContent = user.email;
+    await loadFromCloud();
+    refreshAll();
+  }else{
+    currentUid = null;
+    authBox.classList.remove('hidden');
+    appBox.classList.add('hidden');
+  }
+});
+
+async function loadFromCloud(){
+  if(!currentUid) return;
+  try{
+    const snap = await getDoc(doc(db, 'finance', currentUid));
+    if(snap.exists()){
+      const cloud = snap.data();
+      DB = {...DB, ...cloud};
+      // اطمینان از وجود کاربر اصلی
+      if(!DB.users.find(u=>u.id===DB.currentUser)) DB.currentUser = DB.users[0]?.id || 'u1';
+    }else{
+      // اولین بار: داده پیش‌فرض را به فضای ابری آپلود کن
+      await saveToCloudNow();
+    }
+    localStorage.setItem(DB_KEY, JSON.stringify(DB));
+  }catch(e){ console.warn('Cloud load fail:', e); }
+}
+
+function saveToCloudNow(){
+  if(!currentUid) return Promise.resolve();
+  const data = JSON.parse(JSON.stringify(DB));
+  return setDoc(doc(db, 'finance', currentUid), data).catch(e=>console.warn('Cloud save fail:', e));
+}
+
+function scheduleCloudSave(){
+  if(!currentUid) return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(saveToCloudNow, 1500);
+}
+// Firebase پایان
+</script>
+<style>
+:root{
+  --bg:#0f172a; --card:#1e293b; --card2:#334155;
+  --primary:#10b981; --danger:#ef4444; --warning:#f59e0b;
+  --text:#f1f5f9; --muted:#94a3b8; --border:#475569;
+  --accent:#3b82f6;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Vazirmatn',sans-serif}
+body{background:var(--bg);color:var(--text);min-height:100vh;padding:12px}
+.container{max-width:1200px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px;background:var(--card);border-radius:12px;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+header h1{font-size:20px;color:var(--primary)}
+.user-select{background:var(--card2);color:var(--text);border:1px solid var(--border);padding:8px 12px;border-radius:8px}
+.tabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px}
+.tab{background:var(--card);color:var(--muted);border:none;padding:10px 16px;border-radius:8px;cursor:pointer;white-space:nowrap;font-size:14px;transition:.2s}
+.tab.active{background:var(--primary);color:#fff}
+.tab:hover:not(.active){background:var(--card2)}
+.panel{display:none;animation:fade .3s}
+.panel.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.card{background:var(--card);border-radius:12px;padding:16px;margin-bottom:12px}
+.card h2{font-size:16px;margin-bottom:12px;color:var(--accent)}
+.grid{display:grid;gap:12px}
+.grid-2{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.grid-3{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+.stat{background:var(--card2);padding:14px;border-radius:10px;text-align:center}
+.stat .label{font-size:12px;color:var(--muted);margin-bottom:6px}
+.stat .value{font-size:18px;font-weight:700}
+.stat.income .value{color:var(--primary)}
+.stat.expense .value{color:var(--danger)}
+.stat.balance .value{color:var(--accent)}
+.stat.saving .value{color:var(--warning)}
+input,select,button,textarea{font-family:inherit;font-size:14px}
+input,select,textarea{width:100%;padding:10px;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;margin-bottom:8px}
+input:focus,select:focus{outline:none;border-color:var(--primary)}
+label{font-size:13px;color:var(--muted);display:block;margin-bottom:4px}
+.btn{padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:600;transition:.2s}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:#059669}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-accent{background:var(--accent);color:#fff}
+.btn-sm{padding:6px 10px;font-size:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.row>*{flex:1;min-width:120px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px;text-align:right;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-size:12px;font-weight:600}
+tr:hover{background:var(--card2)}
+.badge{padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600}
+.badge.income{background:#065f46;color:#6ee7b7}
+.badge.expense{background:#7f1d1d;color:#fca5a5}
+.progress{height:8px;background:var(--card2);border-radius:4px;overflow:hidden;margin-top:6px}
+.progress-bar{height:100%;transition:width .4s}
+.progress-bar.ok{background:var(--primary)}
+.progress-bar.warn{background:var(--warning)}
+.progress-bar.over{background:var(--danger)}
+.alert{padding:10px;border-radius:8px;margin-bottom:8px;font-size:13px}
+.alert-warn{background:#78350f;color:#fde68a;border-right:4px solid var(--warning)}
+.alert-danger{background:#7f1d1d;color:#fecaca;border-right:4px solid var(--danger)}
+.empty{text-align:center;color:var(--muted);padding:20px;font-size:13px}
+.chart-wrap{position:relative;height:260px;margin-top:12px}
+.goal-item{background:var(--card2);padding:12px;border-radius:8px;margin-bottom:8px}
+.goal-head{display:flex;justify-content:space-between;margin-bottom:6px;font-size:14px}
+.hidden{display:none!important}
+.tag{display:inline-block;background:var(--card2);padding:2px 8px;border-radius:6px;font-size:11px;margin:2px}
+.auth-box{max-width:400px;margin:80px auto;background:var(--card);padding:24px;border-radius:12px}
+.auth-box h2{margin-bottom:16px;color:var(--primary)}
+.auth-box input{margin-bottom:12px}
+@media(max-width:600px){
+  header h1{font-size:16px}
+  .tab{font-size:12px;padding:8px 12px}
+}
+</style>
+</head>
+<body>
+
+<!-- Firebase Auth Box -->
+<div id="authBox" class="auth-box">
+  <h2>ورود / ثبت‌نام</h2>
+  <label>ایمیل</label>
+  <input type="email" id="authEmail" placeholder="you@example.com">
+  <label>رمز (حداقل ۶ کاراکتر)</label>
+  <input type="password" id="authPass" placeholder="••••••">
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button class="btn btn-primary" onclick="doLogin()" style="flex:1">ورود</button>
+    <button class="btn btn-accent" onclick="doRegister()" style="flex:1">ثبت‌نام</button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="appBox" class="container hidden">
+  <header>
+    <h1>💰 مدیریت مالی هوشمند</h1>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select id="userSelect" class="user-select" onchange="switchUser(this.value)"></select>
+      <button class="btn btn-sm btn-accent" onclick="addUser()">+ کاربر</button>
+      <button class="btn btn-sm btn-danger" onclick="doLogout()">خروج</button>
+      <span id="userEmail" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="dashboard">📊 داشبورد</button>
+    <button class="tab" data-tab="transaction">➕ تراکنش</button>
+    <button class="tab" data-tab="budget">🎯 بودجه</button>
+    <button class="tab" data-tab="report">📈 گزارش</button>
+    <button class="tab" data-tab="savings">🏦 پس‌انداز</button>
+    <button class="tab" data-tab="accounts">💳 حساب‌ها</button>
+    <button class="tab" data-tab="settings">⚙️ تنظیمات</button>
+  </div>
+
+  <div class="panel active" id="panel-dashboard">
+    <div class="card">
+      <h2>خلاصه ماه <span id="currentMonth"></span></h2>
+      <div class="grid grid-3">
+        <div class="stat income"><div class="label">درآمد</div><div class="value" id="dashIncome">۰</div></div>
+        <div class="stat expense"><div class="label">هزینه</div><div class="value" id="dashExpense">۰</div></div>
+        <div class="stat balance"><div class="label">مانده</div><div class="value" id="dashBalance">۰</div></div>
+        <div class="stat saving"><div class="label">پس‌انداز</div><div class="value" id="dashSaving">۰</div></div>
+      </div>
+      <div id="dashAlerts" style="margin-top:12px"></div>
+    </div>
+    <div class="card"><h2>هزینه‌های ماه به تفکیک دسته</h2><div class="chart-wrap"><canvas id="dashChart"></canvas></div></div>
+    <div class="card"><h2>آخرین تراکنش‌ها</h2><div id="recentTx" class="empty">تراکنشی ثبت نشده</div></div>
+  </div>
+
+  <div class="panel" id="panel-transaction">
+    <div class="card">
+      <h2>ثبت تراکنش جدید</h2>
+      <div class="row">
+        <div><label>نوع</label><select id="txType"><option value="expense">هزینه</option><option value="income">درآمد</option></select></div>
+        <div><label>مبلغ</label><input type="number" id="txAmount" placeholder="مثلاً ۵۰۰۰۰۰" min="0"></div>
+        <div><label>تاریخ (شمسی)</label><input type="text" id="txDate" placeholder="1403/01/15"></div>
+      </div>
+      <div class="row">
+        <div><label>دسته</label><select id="txCategory"></select></div>
+        <div><label>حساب</label><select id="txAccount"></select></div>
+        <div><label>توضیح</label><input type="text" id="txDesc" placeholder="اختیاری"></div>
+      </div>
+      <button class="btn btn-primary" onclick="addTransaction()" style="width:100%;margin-top:8px">ثبت</button>
+    </div>
+    <div class="card">
+      <h2>لیست تراکنش‌ها</h2>
+      <div class="row" style="margin-bottom:10px">
+        <div><label>ماه</label><input type="text" id="filterMonth" placeholder="1403/01" oninput="renderTransactions()"></div>
+        <div><label>نوع</label><select id="filterType" onchange="renderTransactions()"><option value="">همه</option><option value="income">درآمد</option><option value="expense">هزینه</option></select></div>
+      </div>
+      <div style="overflow-x:auto"><table><thead><tr><th>تاریخ</th><th>نوع</th><th>دسته</th><th>مبلغ</th><th>حساب</th><th>توضیح</th><th></th></tr></thead><tbody id="txBody"></tbody></table></div>
+      <div id="txEmpty" class="empty">تراکنشی یافت نشد</div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-budget">
+    <div class="card">
+      <h2>تعیین سقف بودجه ماهانه</h2>
+      <div class="row">
+        <div><label>دسته</label><select id="budgetCategory"></select></div>
+        <div><label>سقف (تومان)</label><input type="number" id="budgetAmount" placeholder="مثلاً 3000000"></div>
+        <button class="btn btn-primary" onclick="setBudget()">ذخیره</button>
+      </div>
+    </div>
+    <div class="card"><h2>وضعیت بودجه ماه <span id="budgetMonth"></span></h2><div id="budgetList"></div></div>
+  </div>
+
+  <div class="panel" id="panel-report">
+    <div class="card">
+      <h2>گزارش ماهانه</h2>
+      <div class="row"><div><label>ماه (شمسی)</label><input type="text" id="reportMonth" placeholder="1403/01" oninput="renderReport()"></div></div>
+      <div class="grid grid-3" style="margin-top:12px">
+        <div class="stat income"><div class="label">درآمد</div><div class="value" id="repIncome">۰</div></div>
+        <div class="stat expense"><div class="label">هزینه</div><div class="value" id="repExpense">۰</div></div>
+        <div class="stat balance"><div class="label">مانده</div><div class="value" id="repBalance">۰</div></div>
+      </div>
+      <div class="chart-wrap"><canvas id="reportChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-savings">
+    <div class="card">
+      <h2>هدف پس‌انداز جدید</h2>
+      <div class="row">
+        <div><label>نام هدف</label><input type="text" id="goalName" placeholder="مثلاً خرید لپ‌تاپ"></div>
+        <div><label>مبلغ هدف</label><input type="number" id="goalTarget" placeholder="50000000"></div>
+        <div><label>مهلت</label><input type="text" id="goalDeadline" placeholder="1403/12/29"></div>
+        <button class="btn btn-primary" onclick="addGoal()">افزودن</button>
+      </div>
+    </div>
+    <div class="card"><h2>اهداف من</h2><div id="goalsList" class="empty">هدفی ثبت نشده</div></div>
+  </div>
+
+  <div class="panel" id="panel-accounts">
+    <div class="card">
+      <h2>حساب جدید</h2>
+      <div class="row">
+        <div><label>نام حساب</label><input type="text" id="accName" placeholder="مثلاً بانک ملت"></div>
+        <div><label>موجودی اولیه</label><input type="number" id="accBalance" placeholder="0"></div>
+        <div><label>ارز</label><select id="accCurrency"></select></div>
+        <button class="btn btn-primary" onclick="addAccount()">افزودن</button>
+      </div>
+    </div>
+    <div class="card"><h2>حساب‌های من</h2><div id="accountsList" class="empty">حسابی ثبت نشده</div></div>
+  </div>
+
+  <div class="panel" id="panel-settings">
+    <div class="card">
+      <h2>ارز و نرخ لحظه‌ای</h2>
+      <div class="row" style="margin-bottom:10px">
+        <div><label>ارز پایه</label><select id="rateBase"></select></div>
+        <div><label>ارز مقصد</label><select id="rateQuote"></select></div>
+        <button class="btn btn-accent" onclick="fetchRate()">دریافت نرخ</button>
+      </div>
+      <div id="rateResult" class="empty">نرخی دریافت نشده</div>
+      <div class="row" style="margin-top:10px">
+        <div><label>مبلغ برای تبدیل</label><input type="number" id="convertAmount" placeholder="100"></div>
+        <button class="btn btn-primary" onclick="doConvert()">تبدیل</button>
+      </div>
+      <div id="convertResult" class="empty"></div>
+    </div>
+    <div class="card">
+      <h2>یادآور</h2>
+      <button class="btn btn-accent" onclick="requestNotificationPermission()" style="margin-bottom:10px">فعال‌سازی اعلان</button>
+      <div class="row">
+        <div><label>عنوان</label><input type="text" id="notifTitle" value="یادآور مالی"></div>
+        <div><label>متن</label><input type="text" id="notifBody" placeholder="بودجه ماه را بررسی کن"></div>
+        <button class="btn btn-primary" onclick="sendTestNotification()">ارسال آزمایشی</button>
+      </div>
+      <div id="notifStatus" class="empty"></div>
+    </div>
+    <div class="card">
+      <h2>دسته‌بندی‌ها</h2>
+      <div class="row">
+        <div><label>نام دسته جدید</label><input type="text" id="newCat" placeholder="مثلاً پوشاک"></div>
+        <button class="btn btn-primary" onclick="addCategory()">افزودن</button>
+      </div>
+      <div id="catsList" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h2>ارزها</h2>
+      <div class="row">
+        <div><label>کد ارز</label><input type="text" id="newCurrency" placeholder="مثلاً USD"></div>
+        <button class="btn btn-primary" onclick="addCurrency()">افزودن</button>
+      </div>
+      <div id="currenciesList" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h2>داده‌ها</h2>
+      <button class="btn btn-accent" onclick="exportData()" style="margin-bottom:8px">📤 خروجی JSON</button>
+      <button class="btn btn-danger" onclick="resetAll()">🗑️ پاک کردن همه داده‌ها</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ========== تاریخ شمسی ==========
+function toJalali(gy, gm, gd) {
+  const g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
+  let jy = (gy <= 1600) ? 0 : 979;
+  gy -= (gy <= 1600) ? 621 : 1600;
+  const gy2 = (gm > 2) ? (gy + 1) : gy;
+  let days = (365*gy) + (Math.floor((gy2+3)/4)) - (Math.floor((gy2+99)/100)) + (Math.floor((gy2+399)/400)) - 80 + gd + g_d_m[gm-1];
+  jy += 33 * Math.floor(days/12053);
+  days %= 12053;
+  jy += 4 * Math.floor(days/1461);
+  days %= 1461;
+  if (days > 365) { jy += Math.floor((days-1)/365); days = (days-1)%365; }
+  const jm = (days < 186) ? 1 + Math.floor(days/31) : 7 + Math.floor((days-186)/30);
+  const jd = 1 + ((days < 186) ? (days%31) : ((days-186)%30));
+  return [jy, jm, jd];
+}
+function pad(n){ return n < 10 ? '0'+n : ''+n; }
+function todayJalali(){
+  const d = new Date();
+  const [jy,jm,jd] = toJalali(d.getFullYear(), d.getMonth()+1, d.getDate());
+  return `${jy}/${pad(jm)}/${pad(jd)}`;
+}
+function currentMonthJalali(){
+  const d = new Date();
+  const [jy,jm] = toJalali(d.getFullYear(), d.getMonth()+1, d.getDate());
+  return `${jy}/${pad(jm)}`;
+}
+function formatMoney(n){ return Number(n||0).toLocaleString('fa-IR'); }
+
+// ========== ذخیره‌سازی ==========
+const DB_KEY = 'financeAppV1';
+let DB = {
+  users: [{ id: 'u1', name: 'کاربر اصلی' }],
+  currentUser: 'u1',
+  categories: ['خوراک','اجاره','حمل‌ونقل','قبض‌ها','پوشاک','درمان','تفریح','حقوق','پس‌انداز','سایر'],
+  currencies: ['IRR','USD','EUR','AED','GBP','TRY'],
+  accounts: [],
+  transactions: [],
+  budgets: {},
+  goals: []
+};
+
+function loadDB(){
+  const raw = localStorage.getItem(DB_KEY);
+  if (raw){ try { DB = {...DB, ...JSON.parse(raw)}; } catch(e){} }
+  if (!DB.accounts.length){
+    DB.accounts.push({id:'a1', userId:'u1', name:'نقد', balance:0, currency:'IRR'});
+  }
+}
+function saveDB(){
+  localStorage.setItem(DB_KEY, JSON.stringify(DB));
+  if(typeof scheduleCloudSave === 'function') scheduleCloudSave();
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function currentUserData(){
+  return {
+    accounts: DB.accounts.filter(a=>a.userId===DB.currentUser),
+    transactions: DB.transactions.filter(t=>t.userId===DB.currentUser),
+    budgets: DB.budgets[DB.currentUser] || {},
+    goals: DB.goals.filter(g=>g.userId===DB.currentUser)
+  };
+}
+
+// ========== ناوبری ==========
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.onclick = () => {
+    document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab==='dashboard') renderDashboard();
+    if (btn.dataset.tab==='report') renderReport();
+    if (btn.dataset.tab==='budget') renderBudget();
+    if (btn.dataset.tab==='savings') renderGoals();
+    if (btn.dataset.tab==='accounts') renderAccounts();
+    if (btn.dataset.tab==='settings') renderSettings();
+    if (btn.dataset.tab==='transaction') renderTransactions();
+  };
+});
+
+// ========== کاربران ==========
+function renderUsers(){
+  const sel = document.getElementById('userSelect');
+  sel.innerHTML = DB.users.map(u=>`<option value="${u.id}" ${u.id===DB.currentUser?'selected':''}>${u.name}</option>`).join('');
+}
+function switchUser(id){ DB.currentUser = id; saveDB(); refreshAll(); }
+function addUser(){
+  const name = prompt('نام کاربر جدید:');
+  if (!name) return;
+  const id = uid();
+  DB.users.push({id, name});
+  DB.accounts.push({id:uid(), userId:id, name:'نقد', balance:0, currency:'IRR'});
+  DB.currentUser = id;
+  saveDB(); refreshAll();
+}
+
+// ========== تراکنش ==========
+function fillSelect(id, items, valueKey='id', labelKey='name'){
+  const el = document.getElementById(id);
+  el.innerHTML = items.map(i=>`<option value="${i[valueKey]||i}">${i[labelKey]||i}</option>`).join('');
+}
+function fillCategories(){
+  ['txCategory','budgetCategory'].forEach(id=>{
+    const el = document.getElementById(id);
+    el.innerHTML = DB.categories.map(c=>`<option value="${c}">${c}</option>`).join('');
+  });
+}
+function fillAccounts(){
+  fillSelect('txAccount', currentUserData().accounts);
+}
+function fillCurrencies(){
+  fillSelect('accCurrency', DB.currencies);
+  fillSelect('rateBase', DB.currencies);
+  fillSelect('rateQuote', DB.currencies);
+  document.getElementById('rateBase').value = 'USD';
+  document.getElementById('rateQuote').value = 'IRR';
+}
+
+function addTransaction(){
+  const type = document.getElementById('txType').value;
+  const amount = Number(document.getElementById('txAmount').value);
+  let date = document.getElementById('txDate').value.trim() || todayJalali();
+  const category = document.getElementById('txCategory').value;
+  const accountId = document.getElementById('txAccount').value;
+  const desc = document.getElementById('txDesc').value.trim();
+  if (!amount || amount<=0) return alert('مبلغ معتبر وارد کن');
+  if (!/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(date)) return alert('تاریخ باید مثل 1403/01/15 باشد');
+  DB.transactions.push({id:uid(), userId:DB.currentUser, type, amount, date, category, accountId, desc, createdAt:Date.now()});
+  saveDB();
+  document.getElementById('txAmount').value='';
+  document.getElementById('txDesc').value='';
+  document.getElementById('txDate').value = todayJalali();
+  renderTransactions(); renderDashboard(); checkBudgetAlerts();
+  alert('ثبت شد ✅');
+}
+
+function renderTransactions(){
+  const {transactions} = currentUserData();
+  const fm = document.getElementById('filterMonth').value.trim();
+  const ft = document.getElementById('filterType').value;
+  let list = transactions.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt-a.createdAt);
+  if (fm) list = list.filter(t=>t.date.startsWith(fm));
+  if (ft) list = list.filter(t=>t.type===ft);
+  const body = document.getElementById('txBody');
+  const empty = document.getElementById('txEmpty');
+  if (!list.length){ body.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  const accMap = Object.fromEntries(currentUserData().accounts.map(a=>[a.id,a.name]));
+  body.innerHTML = list.map(t=>`
+    <tr>
+      <td>${t.date}</td>
+      <td><span class="badge ${t.type}">${t.type==='income'?'درآمد':'هزینه'}</span></td>
+      <td>${t.category}</td>
+      <td>${formatMoney(t.amount)}</td>
+      <td>${accMap[t.accountId]||'-'}</td>
+      <td>${t.desc||'-'}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="delTx('${t.id}')">×</button></td>
+    </tr>`).join('');
+}
+function delTx(id){
+  if (!confirm('حذف شود؟')) return;
+  DB.transactions = DB.transactions.filter(t=>t.id!==id);
+  saveDB(); renderTransactions(); renderDashboard(); renderBudget();
+}
+
+// ========== بودجه ==========
+function setBudget(){
+  const cat = document.getElementById('budgetCategory').value;
+  const amount = Number(document.getElementById('budgetAmount').value);
+  if (!amount || amount<=0) return alert('مبلغ معتبر وارد کن');
+  if (!DB.budgets[DB.currentUser]) DB.budgets[DB.currentUser] = {};
+  DB.budgets[DB.currentUser][cat] = amount;
+  saveDB(); renderBudget(); checkBudgetAlerts();
+  alert('ذخیره شد ✅');
+}
+function renderBudget(){
+  const month = currentMonthJalali();
+  document.getElementById('budgetMonth').textContent = month;
+  const {transactions, budgets} = currentUserData();
+  const monthExp = transactions.filter(t=>t.type==='expense' && t.date.startsWith(month));
+  const spentByCat = {};
+  monthExp.forEach(t=>{ spentByCat[t.category] = (spentByCat[t.category]||0) + t.amount; });
+  const el = document.getElementById('budgetList');
+  const cats = Object.keys(budgets);
+  if (!cats.length){ el.innerHTML = '<div class="empty">هنوز بودجه‌ای تعیین نکردی</div>'; return; }
+  el.innerHTML = cats.map(c=>{
+    const cap = budgets[c];
+    const spent = spentByCat[c]||0;
+    const pct = Math.min(100, (spent/cap)*100);
+    const cls = spent>cap ? 'over' : (spent/cap>0.8 ? 'warn' : 'ok');
+    return `<div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:13px">
+        <span>${c}</span><span>${formatMoney(spent)} / ${formatMoney(cap)}</span>
+      </div>
+      <div class="progress"><div class="progress-bar ${cls}" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+function checkBudgetAlerts(){
+  const month = currentMonthJalali();
+  const {transactions, budgets} = currentUserData();
+  const monthExp = transactions.filter(t=>t.type==='expense' && t.date.startsWith(month));
+  const spentByCat = {};
+  monthExp.forEach(t=>{ spentByCat[t.category] = (spentByCat[t.category]||0) + t.amount; });
+  const alerts = [];
+  for (const c in budgets){
+    const s = spentByCat[c]||0;
+    if (s > budgets[c]) alerts.push(`<div class="alert alert-danger">⚠️ از بودجه «${c}» رد شدی! (${formatMoney(s)} از ${formatMoney(budgets[c])})</div>`);
+    else if (s/budgets[c] > 0.8) alerts.push(`<div class="alert alert-warn">🔔 به مرز بودجه «${c}» نزدیک شدی (${Math.round(s/budgets[c]*100)}٪)</div>`);
+  }
+  const el = document.getElementById('dashAlerts');
+  if (el) el.innerHTML = alerts.join('') || '';
+  // ارسال اعلان مرورگر در صورت عبور از بودجه
+  if (alerts.length && Notification.permission === 'granted' && window._lastAlertCount !== alerts.length){
+    window._lastAlertCount = alerts.length;
+    const sw = navigator.serviceWorker?.controller;
+    if (sw) sw.showNotification('هشدار بودجه', {body: alerts.length + ' هشدار بودجه فعال است'});
+  }
+  return alerts.length;
+}
+
+// ========== داشبورد ==========
+let dashChartInst, reportChartInst;
+function renderDashboard(){
+  const month = currentMonthJalali();
+  document.getElementById('currentMonth').textContent = month;
+  const {transactions, goals} = currentUserData();
+  const monthTx = transactions.filter(t=>t.date.startsWith(month));
+  const income = monthTx.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const expense = monthTx.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const saving = goals.reduce((s,g)=>s+Number(g.saved||0),0);
+  document.getElementById('dashIncome').textContent = formatMoney(income);
+  document.getElementById('dashExpense').textContent = formatMoney(expense);
+  document.getElementById('dashBalance').textContent = formatMoney(income-expense);
+  document.getElementById('dashSaving').textContent = formatMoney(saving);
+  checkBudgetAlerts();
+
+  const byCat = {};
+  monthTx.filter(t=>t.type==='expense').forEach(t=>{ byCat[t.category]=(byCat[t.category]||0)+t.amount; });
+  const labels = Object.keys(byCat);
+  const data = labels.map(l=>byCat[l]);
+  const ctx = document.getElementById('dashChart');
+  if (dashChartInst) dashChartInst.destroy();
+  if (!labels.length){
+    ctx.parentElement.innerHTML = '<div class="empty">داده‌ای برای نمایش نیست</div>';
+  } else {
+    dashChartInst = new Chart(ctx, {
+      type:'doughnut',
+      data:{labels, datasets:[{data, backgroundColor:['#10b981','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#84cc16']}]},
+      options:{plugins:{legend:{labels:{color:'#f1f5f9'}}}}
+    });
+  }
+
+  const recent = transactions.slice().sort((a,b)=>b.createdAt-a.createdAt).slice(0,5);
+  const r = document.getElementById('recentTx');
+  if (!recent.length) r.innerHTML = '<div class="empty">تراکنشی ثبت نشده</div>';
+  else r.innerHTML = `<table><tbody>${recent.map(t=>`<tr><td>${t.date}</td><td><span class="badge ${t.type}">${t.type==='income'?'درآمد':'هزینه'}</span></td><td>${t.category}</td><td>${formatMoney(t.amount)}</td></tr>`).join('')}</tbody></table>`;
+}
+
+// ========== گزارش ==========
+function renderReport(){
+  let month = document.getElementById('reportMonth').value.trim() || currentMonthJalali();
+  const {transactions} = currentUserData();
+  const list = transactions.filter(t=>t.date.startsWith(month));
+  const income = list.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const expense = list.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  document.getElementById('repIncome').textContent = formatMoney(income);
+  document.getElementById('repExpense').textContent = formatMoney(expense);
+  document.getElementById('repBalance').textContent = formatMoney(income-expense);
+
+  const byCat = {};
+  list.filter(t=>t.type==='expense').forEach(t=>{ byCat[t.category]=(byCat[t.category]||0)+t.amount; });
+  const labels = Object.keys(byCat);
+  const data = labels.map(l=>byCat[l]);
+  const ctx = document.getElementById('reportChart');
+  if (reportChartInst) reportChartInst.destroy();
+  if (!labels.length){
+    ctx.parentElement.innerHTML = '<div class="empty">داده‌ای برای این ماه نیست</div>';
+    return;
+  }
+  reportChartInst = new Chart(ctx, {
+    type:'bar',
+    data:{labels, datasets:[{label:'هزینه', data, backgroundColor:'#ef4444'}]},
+    options:{plugins:{legend:{labels:{color:'#f1f5f9'}}}, scales:{x:{ticks:{color:'#94a3b8'}}, y:{ticks:{color:'#94a3b8'}}}}
+  });
+}
+
+// ========== اهداف ==========
+function addGoal(){
+  const name = document.getElementById('goalName').value.trim();
+  const target = Number(document.getElementById('goalTarget').value);
+  const deadline = document.getElementById('goalDeadline').value.trim();
+  if (!name || !target) return alert('نام و مبلغ هدف لازم است');
+  DB.goals.push({id:uid(), userId:DB.currentUser, name, target, saved:0, deadline});
+  saveDB();
+  document.getElementById('goalName').value='';
+  document.getElementById('goalTarget').value='';
+  document.getElementById('goalDeadline').value='';
+  renderGoals();
+}
+function renderGoals(){
+  const {goals} = currentUserData();
+  const el = document.getElementById('goalsList');
+  if (!goals.length){ el.innerHTML = '<div class="empty">هدفی ثبت نشده</div>'; return; }
+  el.innerHTML = goals.map(g=>{
+    const pct = Math.min(100, (g.saved/g.target)*100);
+    const cls = pct>=100?'ok':(pct>=50?'warn':'ok');
+    return `<div class="goal-item">
+      <div class="goal-head"><strong>${g.name}</strong><span>${formatMoney(g.saved)} / ${formatMoney(g.target)} ${g.deadline?('· '+g.deadline):''}</span></div>
+      <div class="progress"><div class="progress-bar ${cls}" style="width:${pct}%"></div></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <input type="number" placeholder="مبلغ افزودن" id="goalAdd_${g.id}" style="flex:1;padding:6px">
+        <button class="btn btn-sm btn-primary" onclick="addToGoal('${g.id}')">+</button>
+        <button class="btn btn-sm btn-danger" onclick="delGoal('${g.id}')">×</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function addToGoal(id){
+  const inp = document.getElementById('goalAdd_'+id);
+  const v = Number(inp.value);
+  if (!v) return;
+  const g = DB.goals.find(x=>x.id===id);
+  g.saved = (Number(g.saved)||0) + v;
+  saveDB(); renderGoals(); renderDashboard();
+}
+function delGoal(id){
+  if (!confirm('حذف شود؟')) return;
+  DB.goals = DB.goals.filter(g=>g.id!==id);
+  saveDB(); renderGoals();
+}
+
+// ========== حساب‌ها ==========
+function addAccount(){
+  const name = document.getElementById('accName').value.trim();
+  const balance = Number(document.getElementById('accBalance').value)||0;
+  const currency = document.getElementById('accCurrency').value;
+  if (!name) return alert('نام حساب لازم است');
+  DB.accounts.push({id:uid(), userId:DB.currentUser, name, balance, currency});
+  saveDB(); document.getElementById('accName').value=''; document.getElementById('accBalance').value='';
+  renderAccounts(); fillAccounts();
+}
+function renderAccounts(){
+  const {accounts} = currentUserData();
+  const el = document.getElementById('accountsList');
+  if (!accounts.length){ el.innerHTML = '<div class="empty">حسابی ثبت نشده</div>'; return; }
+  el.innerHTML = accounts.map(a=>`
+    <div class="goal-item">
+      <div class="goal-head"><strong>${a.name}</strong><span>${a.currency} · ${formatMoney(a.balance)}</span></div>
+      <button class="btn btn-sm btn-danger" onclick="delAccount('${a.id}')" style="margin-top:6px">حذف</button>
+    </div>`).join('');
+}
+function delAccount(id){
+  if (!confirm('حذف شود؟')) return;
+  DB.accounts = DB.accounts.filter(a=>a.id!==id);
+  DB.transactions = DB.transactions.filter(t=>t.accountId!==id);
+  saveDB(); renderAccounts(); fillAccounts(); renderTransactions();
+}
+
+// ========== تنظیمات ==========
+function addCategory(){
+  const v = document.getElementById('newCat').value.trim();
+  if (!v || DB.categories.includes(v)) return;
+  DB.categories.push(v); saveDB();
+  document.getElementById('newCat').value=''; renderSettings(); fillCategories();
+}
+function addCurrency(){
+  const v = document.getElementById('newCurrency').value.trim().toUpperCase();
+  if (!v || DB.currencies.includes(v)) return;
+  DB.currencies.push(v); saveDB();
+  document.getElementById('newCurrency').value=''; renderSettings(); fillCurrencies();
+}
+function renderSettings(){
+  document.getElementById('catsList').innerHTML = DB.categories.map(c=>`<span class="tag">${c}</span>`).join('');
+  document.getElementById('currenciesList').innerHTML = DB.currencies.map(c=>`<span class="tag">${c}</span>`).join('');
+}
+function exportData(){
+  const blob = new Blob([JSON.stringify(DB,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'finance-backup-'+todayJalali().replace(/\//g,'-')+'.json';
+  a.click();
+}
+function resetAll(){
+  if (!confirm('همه داده‌ها پاک شود؟')) return;
+  localStorage.removeItem(DB_KEY);
+  location.reload();
+}
+
+// ========== نرخ ارز (Frankfurter) ==========
+window.fetchRate = async function(){
+  const base = document.getElementById('rateBase').value;
+  const quote = document.getElementById('rateQuote').value;
+  const el = document.getElementById('rateResult');
+  if (base === quote){ el.textContent = 'ارزها یکسان هستند'; return; }
+  el.textContent = 'در حال دریافت...';
+  try{
+    const r = await fetch(`https://api.frankfurter.dev/v2/rate/${base.toLowerCase()}/${quote.toLowerCase()}`);
+    const d = await r.json();
+    if (d.rate){
+      el.innerHTML = `1 ${base} = <strong>${d.rate}</strong> ${quote}`;
+    } else {
+      el.textContent = 'نرخ یافت نشد (شاید ارز پشتیبانی نمی‌شود)';
+    }
+  }catch(e){ el.textContent = 'خطا در دریافت نرخ'; }
+};
+window.doConvert = async function(){
+  const base = document.getElementById('rateBase').value;
+  const quote = document.getElementById('rateQuote').value;
+  const amount = Number(document.getElementById('convertAmount').value);
+  const el = document.getElementById('convertResult');
+  if (!amount) return;
+  try{
+    const r = await fetch(`https://api.frankfurter.dev/v2/rate/${base.toLowerCase()}/${quote.toLowerCase()}`);
+    const d = await r.json();
+    if (d.rate) el.innerHTML = `${amount} ${base} = <strong>${(amount*d.rate).toFixed(2)}</strong> ${quote}`;
+    else el.textContent = 'تبدیل ممکن نیست';
+  }catch(e){ el.textContent = 'خطا'; }
+};
+
+// ========== اعلان ==========
+window.requestNotificationPermission = async function(){
+  if (!('Notification' in window)) return alert('مرورگر پشتیبانی نمی‌کند');
+  const p = await Notification.requestPermission();
+  document.getElementById('notifStatus').textContent = 'وضعیت: ' + p;
+  if (p === 'granted' && 'serviceWorker' in navigator){
+    const reg = await navigator.serviceWorker.ready;
+    reg.showNotification('اعلان فعال شد', {body: 'یادآورهای مالی ارسال می‌شوند'});
+  }
+};
+window.sendTestNotification = async function(){
+  if (Notification.permission !== 'granted') return alert('ابتدا اعلان را فعال کن');
+  const title = document.getElementById('notifTitle').value || 'یادآور';
+  const body = document.getElementById('notifBody').value || 'تست';
+  if ('serviceWorker' in navigator){
+    const reg = await navigator.serviceWorker.ready;
+    reg.showNotification(title, {body, icon: 'icon-192.png'});
+  } else {
+    new Notification(title, {body});
+  }
+};
+
+// ========== شروع ==========
+function refreshAll(){
+  renderUsers(); fillCategories(); fillAccounts(); fillCurrencies();
+  renderDashboard(); renderTransactions(); renderBudget(); renderGoals(); renderAccounts(); renderSettings();
+}
+
+// ثبت Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
+}
+
+loadDB();
+document.getElementById('txDate').value = todayJalali();
+document.getElementById('reportMonth').value = currentMonthJalali();
+</script>
+</body>
+  </html>
